@@ -79,18 +79,21 @@ pub enum UriTemplateError {
 pub use crate::templatevar::{IntoTemplateVar, TemplateVar};
 
 #[derive(PartialEq)]
+#[derive(Clone)]
 enum VarSpecType {
     Raw,
     Prefixed(u16),
     Exploded,
 }
 
+#[derive(Clone)]
 struct VarSpec {
     name: String,
     var_type: VarSpecType,
 }
 
 #[derive(PartialEq)]
+#[derive(Clone)]
 enum Operator {
     Null,
     Plus,
@@ -102,6 +105,7 @@ enum Operator {
     Hash,
 }
 
+#[derive(Clone)]
 enum TemplateComponent {
     Literal(String),
     VarList(Operator, Vec<VarSpec>),
@@ -110,6 +114,7 @@ enum TemplateComponent {
 /// The main struct that processes and builds URI Templates.
 use std::fmt;
 
+#[derive(Clone)]
 pub struct UriTemplate {
     /// Original template string provided by the caller.  Retained so that the
     /// template can be displayed exactly as it was written.
