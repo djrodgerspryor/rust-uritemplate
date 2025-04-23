@@ -532,13 +532,6 @@ impl UriTemplate {
         res
     }
 
-    /// Returns an immutable reference to the variables map held by this
-    /// template. This allows callers to inspect which variables have been set
-    /// and their `TemplateVar` values without granting mutation rights.
-    pub fn variables(&self) -> &HashMap<String, TemplateVar> {
-        &self.vars
-    }
-
     /// Returns a map describing all variables that appear in the template
     /// string, keyed by their name.  Each entry contains the `VarSpecType`
     /// (`Raw`, `Prefixed`, or `Exploded`) that was specified for that
