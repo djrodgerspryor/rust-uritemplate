@@ -20,7 +20,12 @@ Basic Usage
 Variable setting can be chained for nice, clean code.
 
 ```rust
+// `UriTemplate::new` returns `Result<UriTemplate, UriTemplateError>` so that
+// parse errors can be handled by the caller.  For quick examples we simply
+// unwrap the result.
+
 let uri = UriTemplate::new("/view/{object:1}/{/object,names}{?query*}")
+    .unwrap()
     .set("object", "lakes")
     .set("names", &["Erie", "Superior", "Ontario"])
     .set("query", &[("size", "15"), ("lang", "en")])
@@ -33,7 +38,7 @@ It is not possible to set a variable to the value "undefined". Instead, simply
 delete the variable if you have already set it.
 
 ```rust
-let mut t = UriTemplate::new("{hello}");
+let mut t = UriTemplate::new("{hello}").unwrap();
 t.set("hello", "Hello World!");
 assert_eq!(t.build(), "Hello%20World%21");
 
