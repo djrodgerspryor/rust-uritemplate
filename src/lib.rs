@@ -78,22 +78,20 @@ pub enum UriTemplateError {
 
 pub use crate::templatevar::{IntoTemplateVar, TemplateVar};
 
-#[derive(PartialEq)]
-#[derive(Clone)]
-enum VarSpecType {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VarSpecType {
     Raw,
     Prefixed(u16),
     Exploded,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct VarSpec {
     name: String,
     var_type: VarSpecType,
 }
 
-#[derive(PartialEq)]
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Operator {
     Null,
     Plus,
@@ -532,6 +530,34 @@ impl UriTemplate {
             res.push_str(&next);
         }
         res
+    }
+
+    /// Returns an immutable reference to the variables map held by this
+    /// template. This allows callers to inspect which variables have been set
+    /// and their `TemplateVar` values without granting mutation rights.
+    pub fn variables(&self) -> &HashMap<String, TemplateVar> {
+        &self.vars
+    }
+
+    /// Returns a map describing all variables that appear in the template
+    /// string, keyed by their name.  Each entry contains the `VarSpecType`
+    /// (`Raw`, `Prefixed`, or `Exploded`) that was specified for that
+    /// variable.
+    ///
+    /// Because the internal representation is rebuilt on each call, the
+    /// returned `HashMap` is owned by the caller; subsequent modifications to
+    /// the template have no effect on a previously obtained map.
+    pub fn variable_specs(&self) -> HashMap<String, VarSpecType> {
+        let mut map = HashMap::new();
+        for component in &self.components {
+            if let TemplateComponent::VarList(_, ref vars) = component {
+                for v in vars {
+                    map.entry(v.name.clone())
+                        .or_insert_with(|| v.var_type.clone());
+                }
+            }
+        }
+        map
     }
 }
 
