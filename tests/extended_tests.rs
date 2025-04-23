@@ -6,19 +6,19 @@ use uritemplate::UriTemplate;
 #[test]
 fn test_additional_examples_1() {
     let mut templates = [
-        UriTemplate::new("{/id*}"),
-        UriTemplate::new("{/id*}{?fields,first_name,last.name,token}"),
-        UriTemplate::new("/search.{format}{?q,geocode,lang,locale,page,result_type}"),
-        UriTemplate::new("/test{/Some%20Thing}"),
-        UriTemplate::new("/set{?number}"),
-        UriTemplate::new("/loc{?long,lat}"),
-        UriTemplate::new("/base{/group_id,first_name}/pages{/page,lang}{?format,q}"),
-        UriTemplate::new("/sparql{?query}"),
-        UriTemplate::new("/go{?uri}"),
-        UriTemplate::new("/service{?word}"),
-        UriTemplate::new("/lookup{?Stra%C3%9Fe}"),
-        UriTemplate::new("{random}"),
-        UriTemplate::new("{?assoc_special_chars*}"),
+        UriTemplate::new("{/id*}").unwrap(),
+        UriTemplate::new("{/id*}{?fields,first_name,last.name,token}").unwrap(),
+        UriTemplate::new("/search.{format}{?q,geocode,lang,locale,page,result_type}").unwrap(),
+        UriTemplate::new("/test{/Some%20Thing}").unwrap(),
+        UriTemplate::new("/set{?number}").unwrap(),
+        UriTemplate::new("/loc{?long,lat}").unwrap(),
+        UriTemplate::new("/base{/group_id,first_name}/pages{/page,lang}{?format,q}").unwrap(),
+        UriTemplate::new("/sparql{?query}").unwrap(),
+        UriTemplate::new("/go{?uri}").unwrap(),
+        UriTemplate::new("/service{?word}").unwrap(),
+        UriTemplate::new("/lookup{?Stra%C3%9Fe}").unwrap(),
+        UriTemplate::new("{random}").unwrap(),
+        UriTemplate::new("{?assoc_special_chars*}").unwrap(),
     ];
 
     for i in 0..templates.len() {
@@ -57,12 +57,12 @@ fn test_additional_examples_1() {
         "/person?fields=name,picture,id&first_name=John&last.name=Doe&token=12345",
         "/person?fields=name,id,picture&first_name=John&last.name=Doe&token=12345",
     ];
-    assert!(template_1_answers.contains(&templates[1].build().as_ref()));
+    assert!(template_1_answers.contains(&templates[1].build().as_str()));
     let template_2_answers = vec![
         "/search.json?q=URI%20Templates&geocode=37.76,-122.427&lang=en&page=5",
         "/search.json?q=URI%20Templates&geocode=-122.427,37.76&lang=en&page=5",
     ];
-    assert!(template_2_answers.contains(&templates[2].build().as_ref()));
+    assert!(template_2_answers.contains(&templates[2].build().as_str()));
     assert_eq!(templates[3].build(), "/test/foo");
     assert_eq!(templates[4].build(), "/set?number=6");
     assert_eq!(templates[5].build(), "/loc?long=37.76&lat=-122.427");
@@ -88,8 +88,8 @@ fn test_additional_examples_1() {
 #[test]
 fn test_additional_examples_2() {
     let mut templates = [
-        UriTemplate::new("{/id*}"),
-        UriTemplate::new("{/id*}{?fields,token}"),
+        UriTemplate::new("{/id*}").unwrap(),
+        UriTemplate::new("{/id*}{?fields,token}").unwrap(),
     ];
 
     for i in 0..templates.len() {
@@ -105,7 +105,7 @@ fn test_additional_examples_2() {
     }
 
     let template_0_answers = vec!["/person/albums", "/albums/person"];
-    assert!(template_0_answers.contains(&templates[0].build().as_ref()));
+    assert!(template_0_answers.contains(&templates[0].build().as_str()));
     let template_1_answers = vec![
         "/person/albums?fields=id,name,picture&token=12345",
         "/person/albums?fields=id,picture,name&token=12345",
@@ -120,19 +120,19 @@ fn test_additional_examples_2() {
         "/albums/person?fields=name,picture,id&token=12345",
         "/albums/person?fields=name,id,picture&token=12345",
     ];
-    assert!(template_1_answers.contains(&templates[1].build().as_ref()));
+    assert!(template_1_answers.contains(&templates[1].build().as_str()));
 }
 
 // Additional Examples 3: Empty Variables
 #[test]
 fn test_additional_examples_3() {
     let mut templates = [
-        UriTemplate::new("{/empty_list}"),
-        UriTemplate::new("{/empty_list*}"),
-        UriTemplate::new("{?empty_list}"),
-        UriTemplate::new("{?empty_list*}"),
-        UriTemplate::new("{?empty_assoc}"),
-        UriTemplate::new("{?empty_assoc*}"),
+        UriTemplate::new("{/empty_list}").unwrap(),
+        UriTemplate::new("{/empty_list*}").unwrap(),
+        UriTemplate::new("{?empty_list}").unwrap(),
+        UriTemplate::new("{?empty_list*}").unwrap(),
+        UriTemplate::new("{?empty_assoc}").unwrap(),
+        UriTemplate::new("{?empty_assoc*}").unwrap(),
     ];
 
     for i in 0..templates.len() {
@@ -141,28 +141,28 @@ fn test_additional_examples_3() {
     }
 
     let template_0_answers = vec![""];
-    assert!(template_0_answers.contains(&templates[0].build().as_ref()));
+    assert!(template_0_answers.contains(&templates[0].build().as_str()));
     let template_1_answers = vec![""];
-    assert!(template_1_answers.contains(&templates[1].build().as_ref()));
+    assert!(template_1_answers.contains(&templates[1].build().as_str()));
     let template_2_answers = vec![""];
-    assert!(template_2_answers.contains(&templates[2].build().as_ref()));
+    assert!(template_2_answers.contains(&templates[2].build().as_str()));
     let template_3_answers = vec![""];
-    assert!(template_3_answers.contains(&templates[3].build().as_ref()));
+    assert!(template_3_answers.contains(&templates[3].build().as_str()));
     let template_4_answers = vec![""];
-    assert!(template_4_answers.contains(&templates[4].build().as_ref()));
+    assert!(template_4_answers.contains(&templates[4].build().as_str()));
     let template_5_answers = vec![""];
-    assert!(template_5_answers.contains(&templates[5].build().as_ref()));
+    assert!(template_5_answers.contains(&templates[5].build().as_str()));
 }
 
 // Additional Examples 4: Numeric Keys
 #[test]
 fn test_additional_examples_4() {
     let mut templates = [
-        UriTemplate::new("{42}"),
-        UriTemplate::new("{?42}"),
-        UriTemplate::new("{1337}"),
-        UriTemplate::new("{?1337*}"),
-        UriTemplate::new("{?german*}"),
+        UriTemplate::new("{42}").unwrap(),
+        UriTemplate::new("{?42}").unwrap(),
+        UriTemplate::new("{1337}").unwrap(),
+        UriTemplate::new("{?1337*}").unwrap(),
+        UriTemplate::new("{?german*}").unwrap(),
     ];
 
     for i in 0..templates.len() {
@@ -185,5 +185,5 @@ fn test_additional_examples_4() {
         "?1337=leet&1337=as&1337=it&1337=can&1337=be"
     );
     let template_4_answers = vec!["?11=elf&12=zw%C3%B6lf", "?12=zw%C3%B6lf&11=elf"];
-    assert!(template_4_answers.contains(&templates[4].build().as_ref()));
+    assert!(template_4_answers.contains(&templates[4].build().as_str()));
 }

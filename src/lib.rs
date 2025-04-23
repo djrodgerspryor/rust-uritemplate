@@ -57,9 +57,28 @@ mod templatevar;
 use crate::percent_encoding::{encode_reserved, encode_unreserved};
 use std::collections::HashMap;
 use std::str::FromStr;
+use thiserror::Error;
+
+/// Errors that can occur while parsing a URI template.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum UriTemplateError {
+    #[error("unmatched closing brace at position {0}")]
+    UnmatchedClosingBrace(usize),
+    #[error("unterminated expression starting at position {0}")]
+    UnterminatedExpression(usize),
+    #[error("empty expression at position {0}")]
+    EmptyExpression(usize),
+    #[error("invalid variable name '{0}' in expression")]
+    InvalidVariableName(String),
+    #[error("invalid prefix length '{0}' for variable '{1}'")]
+    InvalidPrefix(String, String),
+    #[error("expression parsing failed: {0}")]
+    Expression(String),
+}
 
 pub use crate::templatevar::{IntoTemplateVar, TemplateVar};
 
+#[derive(PartialEq)]
 enum VarSpecType {
     Raw,
     Prefixed(u16),
@@ -103,15 +122,48 @@ fn prefixed(s: &str, prefix: u16) -> String {
     }
 }
 
-fn parse_varlist(varlist: &str) -> TemplateComponent {
-    let mut varlist = varlist.to_string();
-    let operator = match varlist.chars().nth(0) {
-        Some(ch) => ch,
-        None => {
-            return TemplateComponent::VarList(Operator::Null, Vec::new());
+fn is_valid_varname(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    // Variable name may consist of ALPHA / DIGIT / "_" or percent encoded triplets
+    // e.g. Some%20Thing
+    let bytes = name.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'.' => {
+                i += 1;
+            }
+            b'%' => {
+                // Need two hex digits after '%'
+                if i + 2 >= bytes.len() {
+                    return false;
+                }
+                let h1 = bytes[i + 1];
+                let h2 = bytes[i + 2];
+                if !((h1 as char).is_ascii_hexdigit() && (h2 as char).is_ascii_hexdigit()) {
+                    return false;
+                }
+                i += 3;
+            }
+            _ => return false,
         }
-    };
-    let operator = match operator {
+    }
+    true
+}
+
+fn parse_varlist(varlist_input: &str) -> Result<TemplateComponent, UriTemplateError> {
+    if varlist_input.is_empty() {
+        return Err(UriTemplateError::EmptyExpression(0));
+    }
+
+    let mut varlist = varlist_input.to_string();
+
+    let first_char = varlist.chars().next().unwrap();
+
+    let operator = match first_char {
         '+' => Operator::Plus,
         '.' => Operator::Dot,
         '/' => Operator::Slash,
@@ -121,42 +173,69 @@ fn parse_varlist(varlist: &str) -> TemplateComponent {
         '#' => Operator::Hash,
         _ => Operator::Null,
     };
+
     if operator != Operator::Null {
         varlist.remove(0);
     }
-    let varspecs = varlist.split(",");
+
+    if varlist.is_empty() {
+        return Err(UriTemplateError::EmptyExpression(0));
+    }
+
+    let varspecs = varlist.split(',');
     let mut varspec_list = Vec::new();
-    for varspec in varspecs {
-        let mut varspec = varspec.to_string();
-        let len = varspec.len();
-        if len >= 1 && varspec.chars().nth(len - 1).unwrap() == '*' {
+
+    for raw_spec in varspecs {
+        if raw_spec.is_empty() {
+            return Err(UriTemplateError::Expression("empty varspec".to_string()));
+        }
+
+        let mut varspec = raw_spec.to_string();
+        let mut var_type = VarSpecType::Raw;
+
+        // Handle explode modifier '*'
+        if varspec.ends_with('*') {
             varspec.pop();
+            var_type = VarSpecType::Exploded;
+        }
+
+        // Handle prefix modifier ':<length>'
+        if let Some(idx) = varspec.find(':') {
+            if var_type == VarSpecType::Exploded {
+                // Both explode and prefix not allowed together
+                return Err(UriTemplateError::Expression(format!(
+                    "both explode and prefix used in '{raw_spec}'"
+                )));
+            }
+
+            let (name_part, prefix_part) = varspec.split_at(idx);
+            let prefix_str = &prefix_part[1..]; // skip ':'
+            if prefix_str.is_empty() {
+                return Err(UriTemplateError::InvalidPrefix(prefix_str.to_string(), name_part.to_string()));
+            }
+            let prefix_num = u16::from_str(prefix_str).map_err(|_| {
+                UriTemplateError::InvalidPrefix(prefix_str.to_string(), name_part.to_string())
+            })?;
+
             varspec_list.push(VarSpec {
-                name: varspec,
-                var_type: VarSpecType::Exploded,
+                name: name_part.to_string(),
+                var_type: VarSpecType::Prefixed(prefix_num),
             });
             continue;
         }
-        if varspec.contains(":") {
-            let parts: Vec<_> = varspec.splitn(2, ":").collect();
-            let prefix = u16::from_str(parts[1]).ok();
-            let prefix = match prefix {
-                Some(p) => p,
-                None => 9999u16,
-            };
-            varspec_list.push(VarSpec {
-                name: parts[0].to_string(),
-                var_type: VarSpecType::Prefixed(prefix),
-            });
-            continue;
+
+        // Variable name validation
+        if !is_valid_varname(&varspec) {
+            return Err(UriTemplateError::InvalidVariableName(varspec));
         }
+
         varspec_list.push(VarSpec {
             name: varspec,
-            var_type: VarSpecType::Raw,
+            var_type,
         });
     }
 
-    TemplateComponent::VarList(operator, varspec_list)
+    Ok(TemplateComponent::VarList(operator, varspec_list))
 }
 
 fn encode_vec<E>(v: &Vec<String>, encoder: E) -> Vec<String>
@@ -174,37 +253,57 @@ impl UriTemplate {
     /// ```ignore
     /// let t = UriTemplate::new("http://example.com/{name}");
     /// ```
-    pub fn new(template: &str) -> UriTemplate {
+    pub fn new(template: &str) -> Result<UriTemplate, UriTemplateError> {
         let mut components = Vec::new();
         let mut buf = String::new();
         let mut in_varlist = false;
 
-        for ch in template.chars() {
-            if in_varlist && ch == '}' {
-                components.push(parse_varlist(&buf));
-                buf = String::new();
-                in_varlist = false;
-                continue;
-            }
-            if !in_varlist && ch == '{' {
-                if buf.len() > 0 {
-                    components.push(TemplateComponent::Literal(buf));
-                    buf = String::new();
+        for (idx, ch) in template.chars().enumerate() {
+            if in_varlist {
+                if ch == '}' {
+                    // End of expression
+                    if buf.is_empty() {
+                        return Err(UriTemplateError::EmptyExpression(idx));
+                    }
+                    let var_component = parse_varlist(&buf).map_err(|e| e)?;
+                    components.push(var_component);
+                    buf.clear();
+                    in_varlist = false;
+                } else if ch == '{' {
+                    // Nested opening brace not allowed
+                    return Err(UriTemplateError::UnmatchedClosingBrace(idx));
+                } else {
+                    buf.push(ch);
                 }
-                in_varlist = true;
-                continue;
+            } else {
+                if ch == '{' {
+                    // start expression
+                    if !buf.is_empty() {
+                        components.push(TemplateComponent::Literal(buf.clone()));
+                        buf.clear();
+                    }
+                    in_varlist = true;
+                } else if ch == '}' {
+                    // unmatched closing brace
+                    return Err(UriTemplateError::UnmatchedClosingBrace(idx));
+                } else {
+                    buf.push(ch);
+                }
             }
-            buf.push(ch);
         }
 
-        if buf.len() > 0 {
+        if in_varlist {
+            return Err(UriTemplateError::UnterminatedExpression(template.len()));
+        }
+
+        if !buf.is_empty() {
             components.push(TemplateComponent::Literal(buf));
         }
 
-        UriTemplate {
-            components: components,
+        Ok(UriTemplate {
+            components,
             vars: HashMap::new(),
-        }
+        })
     }
 
     /// Sets the value of a variable in the URI Template.
@@ -432,5 +531,46 @@ impl UriTemplate {
             res.push_str(&next);
         }
         res
+    }
+}
+
+// --- Convenience helper methods on `Result<UriTemplate, UriTemplateError>` ---
+
+// Helper methods for working with `Result<UriTemplate, UriTemplateError>` in
+// test code without scattering `unwrap()` calls everywhere.
+pub trait UriTemplateResultExt: Sized {
+    fn set<I: IntoTemplateVar>(self, varname: &str, var: I) -> Self;
+    fn delete(self, varname: &str) -> (Self, bool);
+    fn delete_all(self) -> Self;
+    fn build(self) -> Result<String, UriTemplateError>;
+}
+
+impl UriTemplateResultExt for Result<UriTemplate, UriTemplateError> {
+    fn set<I: IntoTemplateVar>(self, varname: &str, var: I) -> Self {
+        self.and_then(|mut t| {
+            t.set(varname, var);
+            Ok(t)
+        })
+    }
+
+    fn delete(self, varname: &str) -> (Self, bool) {
+        match self {
+            Ok(mut t) => {
+                let res = t.delete(varname);
+                (Ok(t), res)
+            }
+            Err(e) => (Err(e), false),
+        }
+    }
+
+    fn delete_all(self) -> Self {
+        self.and_then(|mut t| {
+            t.delete_all();
+            Ok(t)
+        })
+    }
+
+    fn build(self) -> Result<String, UriTemplateError> {
+        self.map(|t| t.build())
     }
 }

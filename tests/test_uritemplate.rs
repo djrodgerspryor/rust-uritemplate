@@ -3,6 +3,7 @@ use uritemplate::{IntoTemplateVar, TemplateVar, UriTemplate};
 #[test]
 fn test_example() {
     let uri = UriTemplate::new("/view/{object:1}{/object,names}{?query*}")
+        .unwrap()
         .set("object", "lakes")
         .set("names", &["Erie", "Superior", "Ontario"])
         .set("query", &[("size", "15"), ("lang", "en")])
@@ -12,7 +13,7 @@ fn test_example() {
 
 #[test]
 fn test_deletion_example() {
-    let mut t = UriTemplate::new("{hello}");
+    let mut t = UriTemplate::new("{hello}").unwrap();
     t.set("hello", "Hello World!");
     assert_eq!(t.build(), "Hello%20World%21");
 
@@ -22,7 +23,7 @@ fn test_deletion_example() {
 
 #[test]
 fn test_delete() {
-    let mut t = UriTemplate::new("{foo}");
+    let mut t = UriTemplate::new("{foo}").unwrap();
     t.set("foo", "123");
 
     assert_eq!(t.build(), "123");
@@ -38,7 +39,7 @@ fn test_delete() {
 
 #[test]
 fn test_delete_all() {
-    let mut t = UriTemplate::new("{A}{B}{C}");
+    let mut t = UriTemplate::new("{A}{B}{C}").unwrap();
     t.set("A", "alpha");
     t.set("B", "beta");
     t.set("C", "charlie");
@@ -69,6 +70,7 @@ fn test_intotemplatevar() {
         state: "California".to_string(),
     };
     let uri = UriTemplate::new("http://example.com/view{?address*}")
+        .unwrap()
         .set("address", &address)
         .build();
     assert_eq!(
@@ -79,7 +81,7 @@ fn test_intotemplatevar() {
 
 #[test]
 fn test_set() {
-    let mut t = UriTemplate::new("");
+    let mut t = UriTemplate::new("").unwrap();
     t.set("hello", "hello".to_string());
     t.set("listvar", Vec::<String>::new());
     t.set("assocvar", Vec::<(String, String)>::new());
@@ -87,6 +89,6 @@ fn test_set() {
 
 #[test]
 fn test_literal_expansion() {
-    let uri = UriTemplate::new("hey!%%25").build();
+    let uri = UriTemplate::new("hey!%%25").unwrap().build();
     assert_eq!(uri, "hey!%25%25");
 }
