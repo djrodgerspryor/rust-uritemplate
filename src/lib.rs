@@ -211,7 +211,10 @@ fn parse_varlist(varlist_input: &str) -> Result<TemplateComponent, UriTemplateEr
             let (name_part, prefix_part) = varspec.split_at(idx);
             let prefix_str = &prefix_part[1..]; // skip ':'
             if prefix_str.is_empty() {
-                return Err(UriTemplateError::InvalidPrefix(prefix_str.to_string(), name_part.to_string()));
+                return Err(UriTemplateError::InvalidPrefix(
+                    prefix_str.to_string(),
+                    name_part.to_string(),
+                ));
             }
             let prefix_num = u16::from_str(prefix_str).map_err(|_| {
                 UriTemplateError::InvalidPrefix(prefix_str.to_string(), name_part.to_string())
@@ -238,11 +241,11 @@ fn parse_varlist(varlist_input: &str) -> Result<TemplateComponent, UriTemplateEr
     Ok(TemplateComponent::VarList(operator, varspec_list))
 }
 
-fn encode_vec<E>(v: &Vec<String>, encoder: E) -> Vec<String>
+fn encode_vec<E>(v: &[String], encoder: E) -> Vec<String>
 where
     E: Fn(&str) -> String,
 {
-    v.iter().map(|s| encoder(&s)).collect()
+    v.iter().map(|s| encoder(s)).collect()
 }
 
 impl UriTemplate {
@@ -265,7 +268,7 @@ impl UriTemplate {
                     if buf.is_empty() {
                         return Err(UriTemplateError::EmptyExpression(idx));
                     }
-                    let var_component = parse_varlist(&buf).map_err(|e| e)?;
+                    let var_component = parse_varlist(&buf)?;
                     components.push(var_component);
                     buf.clear();
                     in_varlist = false;
@@ -275,20 +278,18 @@ impl UriTemplate {
                 } else {
                     buf.push(ch);
                 }
-            } else {
-                if ch == '{' {
-                    // start expression
-                    if !buf.is_empty() {
-                        components.push(TemplateComponent::Literal(buf.clone()));
-                        buf.clear();
-                    }
-                    in_varlist = true;
-                } else if ch == '}' {
-                    // unmatched closing brace
-                    return Err(UriTemplateError::UnmatchedClosingBrace(idx));
-                } else {
-                    buf.push(ch);
+            } else if ch == '{' {
+                // start expression
+                if !buf.is_empty() {
+                    components.push(TemplateComponent::Literal(buf.clone()));
+                    buf.clear();
                 }
+                in_varlist = true;
+            } else if ch == '}' {
+                // unmatched closing brace
+                return Err(UriTemplateError::UnmatchedClosingBrace(idx));
+            } else {
+                buf.push(ch);
             }
         }
 
@@ -343,10 +344,7 @@ impl UriTemplate {
     /// assert_eq!(t.delete("animal"), true);
     /// ```
     pub fn delete(&mut self, varname: &str) -> bool {
-        match self.vars.remove(varname) {
-            Some(_) => true,
-            None => false,
-        }
+        self.vars.remove(varname).is_some()
     }
 
     /// Deletes the values of all variables currently set in the `URITemplate`.
@@ -367,16 +365,13 @@ impl UriTemplate {
     {
         let mut res = String::new();
 
-        let var = match self.vars.get(&v.name) {
-            Some(v) => v,
-            None => return None,
-        };
+        let var = self.vars.get(&v.name)?;
 
         match *var {
             TemplateVar::Scalar(ref s) => {
                 if named {
                     res.push_str(&encode_reserved(&v.name));
-                    if s == "" {
+                    if s.is_empty() {
                         res.push_str(ifemp);
                         return Some(res);
                     }
@@ -392,14 +387,14 @@ impl UriTemplate {
                 };
             }
             TemplateVar::List(ref l) => {
-                if l.len() == 0 {
+                if l.is_empty() {
                     return None;
                 }
                 match v.var_type {
                     VarSpecType::Raw | VarSpecType::Prefixed(_) => {
                         if named {
                             res.push_str(&encode_reserved(&v.name));
-                            if l.join("").len() == 0 {
+                            if l.join("").is_empty() {
                                 res.push_str(ifemp);
                                 return Some(res);
                             }
@@ -412,7 +407,7 @@ impl UriTemplate {
                             let pairs: Vec<String> = l
                                 .iter()
                                 .map(|x| {
-                                    let val: String = if x == "" {
+                                    let val: String = if x.is_empty() {
                                         format!("{}{}", &encode_reserved(&v.name), ifemp)
                                     } else {
                                         format!("{}={}", &encode_reserved(&v.name), &encoder(x))
@@ -422,13 +417,13 @@ impl UriTemplate {
                                 .collect();
                             res.push_str(&pairs.join(sep));
                         } else {
-                            res.push_str(&encode_vec(&l, encoder).join(sep));
+                            res.push_str(&encode_vec(l, encoder).join(sep));
                         }
                     }
                 }
             }
             TemplateVar::AssociativeArray(ref a) => {
-                if a.len() == 0 {
+                if a.is_empty() {
                     return None;
                 }
                 match v.var_type {
@@ -439,9 +434,7 @@ impl UriTemplate {
                         }
                         let pairs: Vec<String> = a
                             .iter()
-                            .map(|&(ref k, ref v)| {
-                                format!("{},{}", &encode_reserved(k), &encoder(v))
-                            })
+                            .map(|(k, v)| format!("{},{}", &encode_reserved(k), &encoder(v)))
                             .collect();
                         res.push_str(&pairs.join(","));
                     }
@@ -449,8 +442,8 @@ impl UriTemplate {
                         if named {
                             let pairs: Vec<String> = a
                                 .iter()
-                                .map(|&(ref k, ref v)| {
-                                    let val: String = if v == "" {
+                                .map(|(k, v)| {
+                                    let val: String = if v.is_empty() {
                                         format!("{}{}", &encode_reserved(k), ifemp)
                                     } else {
                                         format!("{}={}", &encode_reserved(k), &encoder(v))
@@ -462,9 +455,7 @@ impl UriTemplate {
                         } else {
                             let pairs: Vec<String> = a
                                 .iter()
-                                .map(|&(ref k, ref v)| {
-                                    format!("{}={}", &encode_reserved(k), &encoder(v))
-                                })
+                                .map(|(k, v)| format!("{}={}", &encode_reserved(k), &encoder(v)))
                                 .collect();
                             res.push_str(&pairs.join(sep));
                         }
@@ -495,14 +486,13 @@ impl UriTemplate {
             } else {
                 self.build_varspec(varspec, sep, named, ifemp, encode_unreserved)
             };
-            match built {
-                Some(s) => values.push(s),
-                None => {}
+            if let Some(s) = built {
+                values.push(s)
             }
         }
 
         let mut res = String::new();
-        if values.len() != 0 {
+        if !values.is_empty() {
             res.push_str(first);
             res.push_str(&values.join(sep));
         }
@@ -547,9 +537,9 @@ pub trait UriTemplateResultExt: Sized {
 
 impl UriTemplateResultExt for Result<UriTemplate, UriTemplateError> {
     fn set<I: IntoTemplateVar>(self, varname: &str, var: I) -> Self {
-        self.and_then(|mut t| {
+        self.map(|mut t| {
             t.set(varname, var);
-            Ok(t)
+            t
         })
     }
 
@@ -564,9 +554,9 @@ impl UriTemplateResultExt for Result<UriTemplate, UriTemplateError> {
     }
 
     fn delete_all(self) -> Self {
-        self.and_then(|mut t| {
+        self.map(|mut t| {
             t.delete_all();
-            Ok(t)
+            t
         })
     }
 

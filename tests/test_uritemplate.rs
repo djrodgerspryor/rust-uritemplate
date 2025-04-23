@@ -29,11 +29,11 @@ fn test_delete() {
     assert_eq!(t.build(), "123");
 
     // Deleting nonexistent variable has no effect
-    assert_eq!(t.delete("bar"), false);
+    assert!(!t.delete("bar"));
     assert_eq!(t.build(), "123");
 
     // Deleting existing variable works
-    assert_eq!(t.delete("foo"), true);
+    assert!(t.delete("foo"));
     assert_eq!(t.build(), "");
 }
 
@@ -54,7 +54,7 @@ struct Address {
     state: String,
 }
 
-impl<'a> IntoTemplateVar for &'a Address {
+impl IntoTemplateVar for &Address {
     fn into_template_var(self) -> TemplateVar {
         TemplateVar::AssociativeArray(vec![
             ("city".to_string(), self.city.clone()),
