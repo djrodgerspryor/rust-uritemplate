@@ -108,7 +108,12 @@ enum TemplateComponent {
 }
 
 /// The main struct that processes and builds URI Templates.
+use std::fmt;
+
 pub struct UriTemplate {
+    /// Original template string provided by the caller.  Retained so that the
+    /// template can be displayed exactly as it was written.
+    original: String,
     components: Vec<TemplateComponent>,
     vars: HashMap<String, TemplateVar>,
 }
@@ -302,6 +307,7 @@ impl UriTemplate {
         }
 
         Ok(UriTemplate {
+            original: template.to_string(),
             components,
             vars: HashMap::new(),
         })
@@ -521,6 +527,22 @@ impl UriTemplate {
             res.push_str(&next);
         }
         res
+    }
+}
+
+// --- Trait implementations --------------------------------------------------
+
+impl fmt::Display for UriTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.original)
+    }
+}
+
+impl fmt::Debug for UriTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UriTemplate")
+            .field("template", &self.original)
+            .finish()
     }
 }
 
