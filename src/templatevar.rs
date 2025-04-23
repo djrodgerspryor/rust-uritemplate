@@ -84,6 +84,12 @@ impl IntoTemplateVar for String {
     }
 }
 
+impl IntoTemplateVar for &String {
+    fn into_template_var(self) -> TemplateVar {
+        TemplateVar::Scalar(self.to_string())
+    }
+}
+
 impl IntoTemplateVar for &[String] {
     fn into_template_var(self) -> TemplateVar {
         let mut vec = Vec::new();
