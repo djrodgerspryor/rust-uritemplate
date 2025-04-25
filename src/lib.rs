@@ -361,6 +361,153 @@ impl UriTemplate {
         self.vars.clear();
     }
 
+    /// Normalizes the template in-place by lexically sorting all query
+    /// parameters (variables that appear in `?` and `&` expressions) and
+    /// removing duplicate occurrences.  The *first* occurrence of a variable
+    /// is kept while any subsequent duplicates are discarded.  The function
+    /// returns a mutable reference to the template so that it can be chained
+    /// with other builder-style calls.
+    ///
+    /// Only the internal representation (`components`) is modified; the
+    /// variable assignments that may already have been applied with `set()`
+    /// are left untouched.  The `original` template string is also updated so
+    /// that `Display` continues to reflect the current representation.
+    ///
+    /// Example
+    /// -------
+    /// ```ignore
+    /// let mut t = UriTemplate::new("{?b,a}{&b,c}").unwrap();
+    /// t.normalize();
+    /// assert_eq!(t.to_string(), "{?a,b,c}");
+    /// ```
+    pub fn normalize(&mut self) -> &mut Self {
+        use std::collections::HashSet;
+
+        // First, collect all query-related variables and remember the index of
+        // the first query component so that we can re-insert the normalized
+        // list in the same position.
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut query_vars: Vec<VarSpec> = Vec::new();
+        let mut first_query_index: Option<usize> = None;
+        let mut first_query_operator: Option<Operator> = None;
+
+        for (idx, component) in self.components.iter().enumerate() {
+            if let TemplateComponent::VarList(op, vars) = component {
+                if *op == Operator::Question || *op == Operator::Ampersand {
+                    if first_query_index.is_none() {
+                        first_query_index = Some(idx);
+                        first_query_operator = Some(op.clone());
+                    }
+
+                    for v in vars {
+                        if seen.insert(v.name.clone()) {
+                            query_vars.push(v.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort the combined query parameters lexicographically by name.
+        query_vars.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // Rebuild the components vector.
+        let mut new_components: Vec<TemplateComponent> = Vec::with_capacity(self.components.len());
+
+        for (idx, component) in self.components.iter().enumerate() {
+            if Some(idx) == first_query_index {
+                // Insert the (single) normalized query varlist *once* before
+                // processing (and skipping) the existing query components.
+                if !query_vars.is_empty() {
+                    let op_to_use = first_query_operator.clone().unwrap_or(Operator::Question);
+                    new_components.push(TemplateComponent::VarList(op_to_use, query_vars.clone()));
+                }
+            }
+
+            match component {
+                TemplateComponent::VarList(op, _vars)
+                    if (*op == Operator::Question || *op == Operator::Ampersand) => {
+                    // Skip original query varlists – they've been replaced.
+                }
+                other => new_components.push(other.clone()),
+            }
+        }
+
+        // Edge-case: template had query components but they have been removed
+        // (e.g., all were duplicates) – ensure we still inserted once.
+        if first_query_index.is_some() && query_vars.is_empty() {
+            // No query variables – nothing to insert, that's fine.
+        }
+
+        // If there were no query components at all just leave the components
+        // unchanged (normal case is covered by new_components being empty in
+        // that scenario).
+        if first_query_index.is_none() {
+            // Nothing to normalize
+            return self;
+        }
+
+        self.components = new_components;
+
+        // Rebuild the textual template so that Display/Debug remain accurate.
+        self.original = self.rebuild_template_string();
+
+        self
+    }
+
+    /// Helper: constructs a template string from the current `components`
+    /// collection.
+    fn rebuild_template_string(&self) -> String {
+        fn operator_to_char(op: &Operator) -> &'static str {
+            match op {
+                Operator::Null => "",
+                Operator::Plus => "+",
+                Operator::Dot => ".",
+                Operator::Slash => "/",
+                Operator::Semi => ";",
+                Operator::Question => "?",
+                Operator::Ampersand => "&",
+                Operator::Hash => "#",
+            }
+        }
+
+        let mut out = String::new();
+
+        for component in &self.components {
+            match component {
+                TemplateComponent::Literal(s) => out.push_str(s),
+                TemplateComponent::VarList(op, vars) => {
+                    out.push('{');
+                    out.push_str(operator_to_char(op));
+
+                    let mut first = true;
+                    for v in vars {
+                        if !first {
+                            out.push(',');
+                        }
+                        first = false;
+
+                        out.push_str(&v.name);
+                        match v.var_type {
+                            VarSpecType::Raw => {}
+                            VarSpecType::Exploded => {
+                                out.push('*');
+                            }
+                            VarSpecType::Prefixed(p) => {
+                                out.push(':');
+                                out.push_str(&p.to_string());
+                            }
+                        }
+                    }
+
+                    out.push('}');
+                }
+            }
+        }
+
+        out
+    }
+
     fn build_varspec<E>(
         &self,
         v: &VarSpec,
