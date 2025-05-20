@@ -426,7 +426,8 @@ impl UriTemplate {
 
             match component {
                 TemplateComponent::VarList(op, _vars)
-                    if (*op == Operator::Question || *op == Operator::Ampersand) => {
+                    if (*op == Operator::Question || *op == Operator::Ampersand) =>
+                {
                     // Skip original query varlists – they've been replaced.
                 }
                 other => new_components.push(other.clone()),
