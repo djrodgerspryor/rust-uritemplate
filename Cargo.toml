@@ -24,3 +24,4 @@ name = "uritemplate"
 [dependencies]
 regex = "1"
 thiserror = "1"
+schemars = "1.0.0-alpha.17"
